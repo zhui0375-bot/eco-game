@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>🌿 綠色飲食配對遊戲 🌿</title>
+<style>
+  :root{
+    --pink:#ffb6c1;--pink-2:#ff80ab;--bg:#e8f5e9;--fg:#2e4628;--card:#ffffff;--ok:#4caf50;--warn:#ff9800;--bad:#ef5350;
+  }
+  html,body{height:100%}
+  body{font-family: ui-rounded, system-ui, -apple-system, "Noto Sans TC", "Segoe UI", Roboto, Arial, "PingFang TC", "Microsoft JhengHei", sans-serif; background:var(--bg); color:var(--fg); margin:0; display:flex; flex-direction:column; align-items:center; overflow-x:hidden;}
+  header{padding:20px 16px 8px; text-align:center}
+  h1{margin:.2rem 0; color:var(--pink-2); font-weight:800; letter-spacing:.5px}
+  .sub{opacity:.8; font-size:.95rem}
+
+  .toolbar{display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; justify-content:center; padding:10px 16px}
+  .pill{background:var(--pink); color:#fff; border:none; border-radius:999px; padding:10px 16px; cursor:pointer; font-size:.95rem}
+  .pill.secondary{background:#ffd1dc; color:#774b57}
+  .pill:disabled{opacity:.6; cursor:not-allowed}
+  select.pill{appearance:none; padding-right:32px; background-image: linear-gradient(45deg, transparent 50%, #fff 50%),
+               linear-gradient(135deg, #fff 50%, transparent 50%), linear-gradient(to right, #fff, #fff);
+               background-position: calc(100% - 18px) 16px, calc(100% - 12px) 16px, calc(100% - 2.2rem) 0.5rem;
+               background-size: 6px 6px, 6px 6px, 1px 2rem; background-repeat:no-repeat}
+
+  .info{display:flex; gap:16px; flex-wrap:wrap; align-items:center; justify-content:center; padding:4px 16px 0; font-weight:600}
+  .badge{background:#ffe8ef; border:2px solid var(--pink); border-radius:999px; padding:6px 12px}
+  .badge strong{color:#c2185b}
+
+  #announce{position:absolute; left:-9999px}
+
+  main{width:100%; max-width:720px; margin:10px auto 24px; padding:0 16px}
+  #game-wrap{position:relative}
+  #game-board{display:grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap:14px; justify-content:center}
+
+  .card{aspect-ratio:1/1; position:relative; perspective:1000px}
+  .card[aria-disabled="true"]{pointer-events:none}
+  .card-inner{position:absolute; inset:0; transform-style:preserve-3d; transition:transform .6s}
+  @media (prefers-reduced-motion: reduce){.card-inner{transition:none}}
+  .card.flip .card-inner{transform:rotateY(180deg)}
+
+  .face{position:absolute; inset:0; border-radius:16px; backface-visibility:hidden; display:flex; align-items:center; justify-content:center; padding:10px; text-align:center}
+  .front{background:var(--card); border:2px solid var(--pink); transform:rotateY(180deg); font-size:14px; font-weight:700}
+  .back{border: 2px solid var(--pink); border-radius: 16px; background-image: url('1210e760-e9ca-4df7-a670-f8890f84765d.jpg'); background-size: cover; background-position: center; background-repeat: no-repeat;}
+  .matched .front{border-color: var(--ok); box-shadow:0 0 0 3px rgba(76,175,80,.25) inset}
+  .shake{animation:shake .4s}
+  @keyframes shake{10%,90%{transform:translateX(-1px)}20%,80%{transform:translateX(2px)}30%,50%,70%{transform:translateX(-4px)}40%,60%{transform:translateX(4px)}}
+
+  /* 完成動畫 */
+  #finish-animation{
+    position:fixed;
+    inset:0;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    background:rgba(255,255,255,0.6);
+    z-index:1000;
+    animation:fadeOut 2s ease-in forwards;
+  }
+  #finish-animation.show{
+    display:flex;
+  }
+  .confetti{
+    position:absolute;
+    width:10px;height:10px;
+    background:var(--pink-2);
+    opacity:0.8;
+    animation:fall 3s linear infinite;
+  }
+  @keyframes fall{
+    0%{transform:translateY(0) rotate(0);}100%{transform:translateY(100vh) rotate(360deg);opacity:0;}}
+  @keyframes fadeOut{0%{opacity:1;}100%{opacity:0;display:none;}}
+
+  .footer{display:flex; justify-content:center; padding:6px 0 24px; opacity:.8}
+  .small{font-size:.9rem}
+</style>
+</head>
+<body>
+  <audio id="bgm" src="bgm.mp3" autoplay loop></audio>
+  <audio id="applause" src="applause.mp3"></audio>
+  <div id="finish-animation"><h1 style="font-size:2rem;color:#4caf50;">🎉 恭喜完成！</h1></div>
+  <header>
+    <h1>🌿 可愛環保配對遊戲</h1>
+    <div class="sub">中英對照環保小知識｜翻牌配對、計時與最佳成績</div>
+  </header>
+
+  <div class="toolbar" role="group" aria-label="遊戲控制">
+    <button class="pill" id="restart">重新開始</button>
+    <button class="pill secondary" id="peek">提示 3 秒</button>
+    <select class="pill" id="difficulty" aria-label="難度">
+      <option value="20">一般（20 張）</option>
+      <option value="12">簡單（12 張）</option>
+      <option value="30">困難（30 張）</option>
+    </select>
+  </div>
+
+  <div class="info">
+    <div class="badge">⏰ 時間：<strong id="time">0</strong> 秒</div>
+    <div class="badge">🔁 步數：<strong id="moves">0</strong></div>
+    <div class="badge">🏆 最佳：<strong id="best">--</strong></div>
+  </div>
+
+  <main>
+    <div id="game-wrap">
+      <div id="game-board" aria-label="配對卡片區" aria-live="polite"></div>
+      <div id="announce" aria-live="assertive"></div>
+    </div>
+  </main>
+
+  <div class="footer small">提示：按 Enter 或空白鍵也能翻牌，支援鍵盤操作與減少動態。</div>
+
+<script>
+  window.addEventListener('load', () => {
+    const bgm = document.getElementById('bgm');
+    if (!bgm) return;
+    bgm.volume = 0.5;
+    const kick = () => bgm.play().catch(() => {});
+    kick();
+    document.addEventListener('click', kick, { once: true });
+  });
+
+  const words = [["Leftover management", "剩食管理"],["Whole foods", "全食物（未精緻加工）"],["Compost", "堆肥"],["Carbon footprint", "碳足跡"],["Eco-friendly food", "環保食物"],["Reusable food ware", "環保餐具"],["Green labeling", "綠色標章"],["Organic", "有機的"],["Vegan", "全素"],["Diet", "飲食"]];
+  let firstCard=null,lockBoard=true,matchedPairs=0,moves=0,startTime=null,timerHandle=null,totalCards=20;
+  const board=document.getElementById('game-board');
+  const timeEl=document.getElementById('time');
+  const movesEl=document.getElementById('moves');
+  const bestEl=document.getElementById('best');
+  const restartBtn=document.getElementById('restart');
+  const peekBtn=document.getElementById('peek');
+  const diffSel=document.getElementById('difficulty');
+  const announcer=document.getElementById('announce');
+  const finishAnim=document.getElementById('finish-animation');
+  const applause=document.getElementById('applause');
+
+  function shuffle(arr){const a=arr.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+  function samplePairsByTotal(total){const pairCount=Math.max(2,Math.min(words.length,Math.floor(total/2)));return words.slice(0,pairCount);}
+  function buildDeck(total){const base=samplePairsByTotal(total);const deck=[...base,...base.map(([en,zh])=>[zh,en])];return shuffle(deck);}
+  function formatSeconds(s){return String(Math.max(0,Math.floor(s)));}
+  function bestKey(){return `bestTime_${totalCards}`;}
+  function getBest(){const v=localStorage.getItem(bestKey());return v?parseInt(v,10):null;}
+  function setBest(seconds){const best=getBest();if(best===null||seconds<best){localStorage.setItem(bestKey(),String(seconds));}renderBest();}
+  function renderBest(){const v=getBest();bestEl.textContent=v!==null?`${v} 秒`:'--';}
+
+  function createBoard(){
+    board.innerHTML='';
+    const deck=buildDeck(totalCards);
+    deck.forEach(([text,match])=>{
+      const card=document.createElement('div');
+      card.className='card';
+      card.setAttribute('role','button');
+      card.setAttribute('tabindex','0');
+      card.setAttribute('aria-pressed','false');
+      card.dataset.value=text; card.dataset.match=match;
+      card.innerHTML=`<div class="card-inner"><div class="face front">${text}</div><div class="face back" aria-hidden="true"></div></div>`;
+      card.addEventListener('click',onFlip);
+      card.addEventListener('keydown',(e)=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onFlip.call(card);}});
+      board.appendChild(card);
+    });
+    lockBoard=true; peekAll(3000,()=>{lockBoard=false; startTimer();});
+  }
+
+  function onFlip(){if(lockBoard)return;if(this===firstCard)return;this.classList.add('flip');this.setAttribute('aria-pressed','true');if(!firstCard){firstCard=this;return;}moves++;movesEl.textContent=moves;const isMatch=firstCard.dataset.match===this.dataset.value;if(isMatch){handleMatch(this);}else{handleMiss(this);}}
+  function handleMatch(second){firstCard.removeEventListener('click',onFlip);second.removeEventListener('click',onFlip);firstCard.classList.add('matched');second.classList.add('matched');matchedPairs++;announce('配對成功！');resetTurn();if(matchedPairs===totalCards/2){endGame();}}
+  function handleMiss(second){lockBoard=true;[firstCard,second].forEach(c=>c.classList.add('shake'));setTimeout(()=>{[firstCard,second].forEach(c=>{c.classList.remove('flip','shake');c.setAttribute('aria-pressed','false');});announce('再試一次～');resetTurn();},700);}
+  function resetTurn(){[firstCard,lockBoard]=[null,false];}
+  function startTimer(){clearInterval(timerHandle);startTime=Date.now();timeEl.textContent='0';timerHandle=setInterval(()=>{const sec=formatSeconds((Date.now()-startTime)/1000);timeEl.textContent=sec;},250);}
+  function stopTimer(){clearInterval(timerHandle);const sec=Math.floor((Date.now()-startTime)/1000);return sec;}
+  function showFinishAnimation(){
+    finishAnim.classList.add('show');
+    // 加入隨機彩帶
+    for(let i=0;i<40;i++){
+      const conf=document.createElement('div');
+      conf.className='confetti';
+      conf.style.left=Math.random()*100+'%';
+      conf.style.backgroundColor=`hsl(${Math.random()*360},80%,70%)`;
+      conf.style.animationDelay=Math.random()*2+'s';
+      finishAnim.appendChild(conf);
+      setTimeout(()=>conf.remove(),3000);
+    }
+    applause.volume=0.8;
+    applause.currentTime=0;
+    applause.play().catch(()=>{});
+    setTimeout(()=>finishAnim.classList.remove('show'),2500);
+  }
+
+  function endGame(){const sec=stopTimer();setBest(sec);announce(`恭喜完成！共花了 ${sec} 秒`);showFinishAnimation();setTimeout(()=>{alert(`🎉 恭喜完成！\n⏰ 時間：${sec} 秒\n🔁 步數：${moves}`);},800);}
+  function restart(){clearInterval(timerHandle);matchedPairs=0;moves=0;firstCard=null;lockBoard=true;movesEl.textContent='0';timeEl.textContent='0';renderBest();createBoard();}
+  function peekAll(duration=3000,done){const cards=[...document.querySelectorAll('.card')];cards.forEach(c=>c.classList.add('flip'));setTimeout(()=>{cards.forEach(c=>{if(!c.classList.contains('matched')){c.classList.remove('flip');c.setAttribute('aria-pressed','false');}});done&&done();},duration);}
+  function announce(msg){announcer.textContent=msg;}
+  restartBtn.addEventListener('click',restart);
+  peekBtn.addEventListener('click',()=>{if(lockBoard)return;lockBoard=true;peekAll(3000,()=>{lockBoard=false;});});
+  diffSel.addEventListener('change',(e)=>{totalCards=parseInt(e.target.value,10);restart();});
+  (function init(){renderBest();createBoard();})();
+</script>
+</body>
+</html>
